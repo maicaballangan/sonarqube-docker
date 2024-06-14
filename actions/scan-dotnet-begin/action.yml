@@ -1,0 +1,27 @@
+# This action is for .NET code analysis begin statement
+name: Begin Code Analysis
+
+inputs:
+  sonar-token:
+    description: Sonar Token
+    required: true
+  args:
+    description: Additional args
+    required: false
+
+runs:
+  using: composite
+
+  steps:
+    - name: Begin SonarQube Scan
+      if: github.actor != 'dependabot[bot]'
+      shell: bash
+      run: | 
+        dotnet tool install dotnet-sonarscanner --tool-path ./.dotnet/tools \
+        && ./.dotnet/tools/dotnet-sonarscanner begin /k:"${{ github.event.repository.name }}" \
+          /n:${{ github.event.repository.name }} \
+          /d:sonar.token=${{ inputs.sonar-token }} \
+          /d:sonar.host.url=$SONAR_HOST \
+          /d:sonar.cs.dotcover.reportsPaths=**/dotCover.Output.html \
+          /d:sonar.cs.opencover.reportsPaths=**/coverage.xml \
+          ${{ inputs.args }}

@@ -1,0 +1,47 @@
+# This action is for .NET code analysis end statement
+name: End Code Analysis
+
+inputs:
+  sonar-token:
+    description: Sonar Token
+    required: true
+  disable-java-install:
+    description: 'Set to true if java is already installed in your ci'
+    type: boolean
+    required: false
+  disable-quality-gate:
+    description: 'Set to true to pass Github Action despite Quality Gate Failure'
+    type: boolean
+    required: false
+
+runs:
+  using: composite
+
+  steps:
+    - uses: actions/setup-java@v3
+      if: github.actor != 'dependabot[bot]' && inputs.disable-java-install != 'true'
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+
+    - name: Cache SonarQube packages
+      uses: actions/cache@v3
+      if: github.actor != 'dependabot[bot]'
+      with:
+        path: ~/.sonar/cache
+        key: ${{ runner.os }}-sonar
+        restore-keys: ${{ runner.os }}-sonar
+
+    - name: End SonarQube Scan
+      if: github.actor != 'dependabot[bot]'
+      shell: bash
+      run: ./.dotnet/tools/dotnet-sonarscanner end /d:sonar.token=${{ inputs.sonar-token }}
+
+    - name: SonarQube Quality Gate check
+      uses: sonarsource/sonarqube-quality-gate-action@master
+      if:  github.actor != 'dependabot[bot]' && github.event_name == 'pull_request' && inputs.disable-quality-gate != 'true' && !contains(fromJSON('["master", "main", "develop"]'), github.head_ref)
+      env:
+        SONAR_TOKEN: ${{ inputs.sonar-token }}
+        SONAR_HOST_URL: $SONAR_HOST
+      with:
+        scanMetadataReportFile: .sonarqube/out/.sonar/report-task.txt

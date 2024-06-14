@@ -1,0 +1,27 @@
+name: Install scanner
+
+runs:
+  using: composite
+
+  steps:
+    - uses: actions/cache/restore@v3
+      id: cache-scanner
+      with:
+        path: /home/runner/.sonar/sonar-scanner-5.0.1.3006-linux
+        key: ${{ runner.os }}-sonar-scanner
+        restore-keys: ${{ runner.os }}-sonar-scanner
+
+    - name: Install Sonar Scanner
+      if: steps.cache-scanner.outputs.cache-hit != 'true'
+      shell: bash
+      run: bash ${{ github.action_path }}/../scripts/install-sonar-scanner.sh
+
+    - name: Create symlink
+      shell: bash
+      run: sudo ln -s /home/runner/.sonar/sonar-scanner-5.0.1.3006-linux/bin/sonar-scanner /usr/local/bin/
+
+    - uses: actions/cache/save@v3
+      if: steps.cache-scanner.outputs.cache-hit != 'true'
+      with:
+        path: /home/runner/.sonar/sonar-scanner-5.0.1.3006-linux
+        key: ${{ runner.os }}-sonar-scanner

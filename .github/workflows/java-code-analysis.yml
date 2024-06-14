@@ -1,0 +1,83 @@
+name: Java Code Analysis Workflow
+
+on:
+  workflow_call:
+    inputs:
+      jdk-version:
+        description: 'JDK version'
+        required: true
+        type: string
+      verbose:
+        type: boolean
+        required: false
+      build:
+        type: string
+        required: true
+      settings:
+        description: 'Maven settings.xml file full path (eg: path/name.xml)'
+        type: string
+        required: false
+      disable-quality-gate:
+        description: 'Set to true to pass Github Action despite Quality Gate Failure'
+        type: boolean
+        required: false
+      ignore-test-failure:
+        description: 'Ignore test failure'
+        type: boolean
+        required: false
+      working-directory:
+        description: 'Set working directory if not in project root dir. Defaults to root dir.'
+        type: string
+        required: false
+
+jobs:
+  java-scan:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory || '.' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Disabling shallow clone is recommended for improving relevancy of reporting.
+          fetch-depth: 0
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ inputs.jdk-version }}
+          distribution: temurin
+          cache: ${{ inputs.build }}
+
+      # Make sure to add jacoco plugin to your build to get code coverage
+      - name: Build and Test
+        if: ${{ inputs.build == 'gradle' }}
+        uses: gradle/gradle-build-action@v3
+        with:
+          arguments: test
+          gradle-version: wrapper
+        env:
+          ARTIFACTORY_USER: ${{ vars.ARTIFACTORY_USER }}
+          ARTIFACTORY_TOKEN: ${{ secrets.ARTIFACTORY_TOKEN }}
+
+      - name: Build and Test
+        if: ${{ inputs.build == 'maven' }}
+        shell: bash
+        env:
+          ARTIFACTORY_USER: ${{ vars.ARTIFACTORY_USER }}
+          ARTIFACTORY_TOKEN: ${{ secrets.ARTIFACTORY_TOKEN }}
+          ARTIFACTORY_USERNAME: ${{ vars.ARTIFACTORY_USER }}
+          ARTIFACTORY_PASSWORD: ${{ secrets.ARTIFACTORY_TOKEN }}
+          SETTINGS: ${{ inputs.settings }}
+        run: mvn install -B -Dmaven.javadoc.skip=true ${SETTINGS:+-s $SETTINGS} -Dmaven.test.failure.ignore=${{ inputs.ignore-test-failure }}
+
+      # Make sure to add sonar plugin to your build if you are using gradle
+      - name: Code Analysis 🔍
+        uses: maicaballangan/sonarqube/actions/scan-java@v1
+        with:
+          sonar-token: ${{ secrets.SONAR_TOKEN }}
+          verbose: ${{ inputs.verbose }}
+          build: ${{ inputs.build }}
+          settings: ${{ inputs.settings }}
+          disable-quality-gate: ${{ inputs.disable-quality-gate }}
+          working-directory: ${{ inputs.working-directory }}

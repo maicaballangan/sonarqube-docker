@@ -1,0 +1,66 @@
+name: Code Analysis
+
+inputs:
+  sonar-token:
+    description: 'Sonar Token to access sonarqube server (Required). Use SONAR_TOKEN organizational secret'
+    required: true
+  project-key:
+    description: 'Project key identifier. Default is repository_name. Only pass a value if project is monorepo to identify projects (usually if written in different language)'
+    required: false
+  project-name:
+    description: 'Project name identifier. Default is repository_name. Only pass a value if project is monorepo to identify projects'
+    required: false
+  sources:
+    description: 'Comma-delimited source folders. Default is current working directory'
+    required: false
+  tests:
+    description: 'Comma-delimited test folders. Default is current working directory'
+    required: false
+  exclusions:
+    description: 'File/path exclusions which can contain wildcards patterns'
+    required: false
+  disable-quality-gate:
+    description: 'Set to true to pass Github Action despite Quality Gate Failure (not recommended)'
+    type: boolean
+    required: false
+  working-directory:
+    description: 'Set working directory if not in project root dir. Composite actions runs in root instead of current working directory'
+    type: string
+    required: false
+
+runs:
+  using: composite
+
+  steps:
+    - name: Install Sonar Scanner
+      if: github.actor != 'dependabot[bot]'
+      uses: maicaballangan/sonarqube/actions/install-scanner@v1
+
+    - name: SonarQube Scan 🔍
+      if: github.actor != 'dependabot[bot]'
+      shell: bash
+      run: >
+        sonar-scanner -Dsonar.host.url=$SONAR_HOST \
+          -Dsonar.token=${{ inputs.sonar-token }} \
+          -Dsonar.projectKey=${{ inputs.project-key || format('{0}',github.event.repository.name) }} \
+          -Dsonar.projectName=${{ inputs.project-name || github.event.repository.name }} \
+          -Dsonar.sources=${{ inputs.sources || '.' }} \
+          -Dsonar.tests=${{ inputs.tests || '.' }} \
+          -Dsonar.test.inclusions=**/*.test.*,**/*.spec.* \
+          -Dsonar.exclusions=${{ inputs.exclusions }}
+      working-directory: ${{ inputs.working-directory || '.' }}
+
+    - name: Get Sonar Scan Report Path
+      id: report
+      if: github.actor != 'dependabot[bot]' && inputs.disable-quality-gate != 'true'
+      shell: bash
+      run: echo path=$(find $(pwd -P) -name report-task.txt) >> $GITHUB_OUTPUT
+
+    - name: SonarQube Quality Gate Check 🚦
+      if:  github.actor != 'dependabot[bot]' && github.event_name == 'pull_request' && inputs.disable-quality-gate != 'true' && !contains(fromJSON('["master", "main", "develop"]'), github.head_ref)
+      uses: sonarsource/sonarqube-quality-gate-action@master
+      env:
+        SONAR_TOKEN: ${{ inputs.sonar-token }}
+        SONAR_HOST_URL: $SONAR_HOST
+      with:
+        scanMetadataReportFile: ${{ steps.report.outputs.path }}
